@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { deleteWord } from '../utils/words'
 import { speakJapanese } from '../utils/tts'
+import AiFixWord from './AiFixWord'
+import EditWord from './EditWord'
 
 export default function WordList({ uid, words }) {
   const [search, setSearch] = useState('')
@@ -46,6 +48,8 @@ export default function WordList({ uid, words }) {
                 >
                   🔊
                 </button>
+                <EditWord uid={uid} word={w} />
+                <AiFixWord uid={uid} word={w} />
                 <button
                   className="icon-btn danger"
                   title="삭제"

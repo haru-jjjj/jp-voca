@@ -455,6 +455,104 @@ button:disabled {
   padding: 30px 0;
 }
 
+/* ---------- 직접 수정 (AI 없이) ---------- */
+.edit-word-box {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px;
+}
+.edit-word-title {
+  margin: 0 0 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ---------- AI로 단어 수정 ---------- */
+.ai-fix-box {
+  margin-top: 8px;
+  border: 1px solid var(--accent);
+  background: #fdf7f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+.ai-fix-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.ai-fix-note {
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.92rem;
+  resize: vertical;
+  margin-bottom: 10px;
+}
+.ai-fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-fix-actions > button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.ai-fix-actions > button.ghost-btn {
+  background: transparent;
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+.ai-fix-actions > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ai-fix-proposal {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ai-fix-diff-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+.ai-fix-old {
+  color: var(--text-soft);
+  text-decoration: line-through;
+}
+.ai-fix-arrow {
+  color: var(--text-soft);
+}
+.ai-fix-new {
+  color: var(--good);
+  font-weight: 600;
+}
+.review-fix-wrap {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 8px;
+}
+.review-fix-wrap > .edit-word-box,
+.review-fix-wrap > .ai-fix-box {
+  flex: 1 1 100%;
+}
+
 /* ---------- Review ---------- */
 .review-stats {
   display: flex;

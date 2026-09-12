@@ -3,6 +3,8 @@ import { updateWord } from '../utils/words'
 import { nextSrs, isDue } from '../utils/srs'
 import { recordReview } from '../utils/stats'
 import { speakJapanese } from '../utils/tts'
+import AiFixWord from './AiFixWord'
+import EditWord from './EditWord'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -123,6 +125,13 @@ export default function Review({ uid, words, stats }) {
               )}
             </div>
           </div>
+
+          {flipped && (
+            <div className="review-fix-wrap">
+              <EditWord key={`edit-${current.id}`} uid={uid} word={current} />
+              <AiFixWord key={`ai-${current.id}`} uid={uid} word={current} />
+            </div>
+          )}
 
           {flipped && (
             <div className="answer-buttons">
