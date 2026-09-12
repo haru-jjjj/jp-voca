@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { updateWord } from '../utils/words'
 import { nextSrs, isDue } from '../utils/srs'
 import { recordReview } from '../utils/stats'
 import { speakJapanese } from '../utils/tts'
-import AiFixWord from './AiFixWord'
-import EditWord from './EditWord'
+import { AiFixButton, AiFixPanel } from './AiFixWord'
+import { EditButton, EditPanel } from './EditWord'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -23,14 +23,21 @@ export default function Review({ uid, words, stats }) {
   const [queue, setQueue] = useState(() => shuffle(dueWords))
   const [flipped, setFlipped] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
+  const [activePanel, setActivePanel] = useState(null) // null | 'edit' | 'ai'
 
   function restart() {
     setQueue(shuffle(words.filter((w) => isDue(w.srs))))
     setFlipped(false)
     setSessionCount(0)
+    setActivePanel(null)
   }
 
   const current = queue[0]
+
+  // 카드가 바뀌면 이전 카드에서 열어둔 수정 패널은 닫아준다.
+  useEffect(() => {
+    setActivePanel(null)
+  }, [current?.id])
 
   async function handleAnswer(quality) {
     if (!current) return
@@ -42,6 +49,7 @@ export default function Review({ uid, words, stats }) {
     await recordReview(uid, stats)
     setSessionCount((n) => n + 1)
     setFlipped(false)
+    setActivePanel(null)
 
     setQueue((prev) => {
       const rest = prev.slice(1)
@@ -128,8 +136,32 @@ export default function Review({ uid, words, stats }) {
 
           {flipped && (
             <div className="review-fix-wrap">
-              <EditWord key={`edit-${current.id}`} uid={uid} word={current} />
-              <AiFixWord key={`ai-${current.id}`} uid={uid} word={current} />
+              <div className="review-fix-buttons">
+                <EditButton
+                  active={activePanel === 'edit'}
+                  onClick={() => setActivePanel((p) => (p === 'edit' ? null : 'edit'))}
+                />
+                <AiFixButton
+                  active={activePanel === 'ai'}
+                  onClick={() => setActivePanel((p) => (p === 'ai' ? null : 'ai'))}
+                />
+              </div>
+              {activePanel === 'edit' && (
+                <EditPanel
+                  uid={uid}
+                  word={current}
+                  onClose={() => setActivePanel(null)}
+                  onSaved={() => setActivePanel(null)}
+                />
+              )}
+              {activePanel === 'ai' && (
+                <AiFixPanel
+                  uid={uid}
+                  word={current}
+                  onClose={() => setActivePanel(null)}
+                  onSaved={() => setActivePanel(null)}
+                />
+              )}
             </div>
           )}
 

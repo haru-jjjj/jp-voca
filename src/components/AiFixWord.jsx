@@ -10,23 +10,28 @@ const FIELD_LABELS = [
   ['exampleMeaning', '예문 뜻'],
 ]
 
-// 단어장/복습 화면 어디서든 붙여 쓸 수 있는, 단어 하나를 AI로 고치는 위젯.
-// "뜻/읽는법이 틀렸다" 같은 걸 발견했을 때, 사용자가 메모를 적어 보내면
-// Claude가 그 단어 항목만 다시 다듬어서 제안하고, 확인 후 저장한다.
-export default function AiFixWord({ uid, word, onSaved }) {
-  const [open, setOpen] = useState(false)
+// 단어장/복습 화면 어디서든 붙여 쓸 수 있는, 단어 하나를 AI로 고치는 기능.
+// 버튼(AiFixButton)과 실제 패널(AiFixPanel)을 분리해서, 패널이 열렸을 때
+// 아이콘 버튼들이 있는 좁은 가로줄 안이 아니라 카드 전체 너비를 쓰는 별도 영역에 그려지게 한다.
+export function AiFixButton({ active, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`icon-btn ${active ? 'is-active' : ''}`}
+      title="AI로 이 단어 수정"
+      onClick={onClick}
+    >
+      🪄
+    </button>
+  )
+}
+
+export function AiFixPanel({ uid, word, onClose, onSaved }) {
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [proposal, setProposal] = useState(null)
-
-  function reset() {
-    setOpen(false)
-    setNote('')
-    setError('')
-    setProposal(null)
-  }
 
   async function handleAsk() {
     if (!note.trim()) return
@@ -78,26 +83,12 @@ export default function AiFixWord({ uid, word, onSaved }) {
         exampleMeaning: exampleMeaning ?? word.exampleMeaning,
         tags: Array.isArray(tags) ? tags : word.tags || [],
       })
-      reset()
       onSaved?.()
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
     }
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="icon-btn"
-        title="AI로 이 단어 수정"
-        onClick={() => setOpen(true)}
-      >
-        🪄
-      </button>
-    )
   }
 
   const changedFields = proposal
@@ -115,14 +106,10 @@ export default function AiFixWord({ uid, word, onSaved }) {
         disabled={loading || saving}
       />
       <div className="ai-fix-actions">
-        <button
-          type="button"
-          onClick={handleAsk}
-          disabled={loading || saving || !note.trim()}
-        >
+        <button type="button" onClick={handleAsk} disabled={loading || saving || !note.trim()}>
           {loading ? '확인 중...' : 'AI에게 확인 요청'}
         </button>
-        <button type="button" className="ghost-btn" onClick={reset} disabled={loading || saving}>
+        <button type="button" className="ghost-btn" onClick={onClose} disabled={loading || saving}>
           닫기
         </button>
       </div>
@@ -146,14 +133,15 @@ export default function AiFixWord({ uid, word, onSaved }) {
             </>
           )}
           <div className="ai-fix-actions">
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={saving || changedFields.length === 0}
-            >
+            <button type="button" onClick={handleApply} disabled={saving || changedFields.length === 0}>
               {saving ? '적용 중...' : '이대로 적용'}
             </button>
-            <button type="button" className="ghost-btn" onClick={() => setProposal(null)} disabled={saving}>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setProposal(null)}
+              disabled={saving}
+            >
               다시 메모 쓰기
             </button>
           </div>

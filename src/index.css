@@ -428,6 +428,10 @@ button:disabled {
 .icon-btn.danger:hover {
   background: #fbe4e1;
 }
+.icon-btn.is-active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .word-example {
   background: #faf9f7;
   border-radius: 8px;
@@ -543,14 +547,14 @@ button:disabled {
   width: 100%;
   max-width: 420px;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
-.review-fix-wrap > .edit-word-box,
-.review-fix-wrap > .ai-fix-box {
-  flex: 1 1 100%;
+.review-fix-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
 }
 
 /* ---------- Review ---------- */

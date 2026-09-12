@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { deleteWord } from '../utils/words'
 import { speakJapanese } from '../utils/tts'
-import AiFixWord from './AiFixWord'
-import EditWord from './EditWord'
+import { AiFixButton, AiFixPanel } from './AiFixWord'
+import { EditButton, EditPanel } from './EditWord'
 
 export default function WordList({ uid, words }) {
   const [search, setSearch] = useState('')
+  // 카드별로 어떤 수정 패널이 열려있는지: { [단어id]: 'edit' | 'ai' | undefined }
+  const [openPanel, setOpenPanel] = useState({})
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -21,6 +23,14 @@ export default function WordList({ uid, words }) {
   async function handleDelete(id) {
     if (!confirm('이 단어를 삭제할까요?')) return
     await deleteWord(uid, id)
+  }
+
+  function togglePanel(id, panel) {
+    setOpenPanel((prev) => ({ ...prev, [id]: prev[id] === panel ? null : panel }))
+  }
+
+  function closePanel(id) {
+    setOpenPanel((prev) => ({ ...prev, [id]: null }))
   }
 
   return (
@@ -48,8 +58,14 @@ export default function WordList({ uid, words }) {
                 >
                   🔊
                 </button>
-                <EditWord uid={uid} word={w} />
-                <AiFixWord uid={uid} word={w} />
+                <EditButton
+                  active={openPanel[w.id] === 'edit'}
+                  onClick={() => togglePanel(w.id, 'edit')}
+                />
+                <AiFixButton
+                  active={openPanel[w.id] === 'ai'}
+                  onClick={() => togglePanel(w.id, 'ai')}
+                />
                 <button
                   className="icon-btn danger"
                   title="삭제"
@@ -75,6 +91,23 @@ export default function WordList({ uid, words }) {
                 <p className="example-reading">{w.exampleReading}</p>
                 <p className="example-meaning">{w.exampleMeaning}</p>
               </div>
+            )}
+            {/* 수정 패널은 아이콘 줄과 분리된, 카드 전체 너비를 쓰는 영역에 그린다 */}
+            {openPanel[w.id] === 'edit' && (
+              <EditPanel
+                uid={uid}
+                word={w}
+                onClose={() => closePanel(w.id)}
+                onSaved={() => closePanel(w.id)}
+              />
+            )}
+            {openPanel[w.id] === 'ai' && (
+              <AiFixPanel
+                uid={uid}
+                word={w}
+                onClose={() => closePanel(w.id)}
+                onSaved={() => closePanel(w.id)}
+              />
             )}
           </div>
         ))}
