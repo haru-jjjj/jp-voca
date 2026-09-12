@@ -215,12 +215,7 @@ export default function AddWords({ uid, existingWords }) {
       <div className="memo-head">
         <div>
           <h2>단어 메모장</h2>
-          <p className="hint">
-            떠오르는 단어나 Notion에서 정리해둔 내용을 자유롭게 적어두는 공간입니다.
-            내용은 자동 저장되며 새로고침하거나 나중에 다시 들어와도 그대로 남아 있습니다.
-            &quot;단어장 업데이트&quot;를 누르면 <b>새로 추가되거나 수정된 줄만</b> 분석하니,
-            메모가 길어져도 API 호출과 대기 시간이 늘어나지 않습니다.
-          </p>
+          <p className="hint">자동 저장 · 새로 추가한 줄만 분석해요</p>
         </div>
         <span className="save-indicator">
           {saveState === 'saving' && '저장 중...'}
