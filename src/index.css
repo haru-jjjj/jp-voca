@@ -665,6 +665,9 @@ button:disabled {
   margin-top: 10px;
   font-size: 0.9rem;
 }
+.handwrite-trigger {
+  margin: -4px 0 0;
+}
 .answer-buttons {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -683,6 +686,45 @@ button:disabled {
 .ans-hard { background: #d18a2a; }
 .ans-good { background: #3f7fbf; }
 .ans-easy { background: var(--good); }
+
+/* ---------- 손글씨 연습판 (임시, 저장 안 됨) ---------- */
+.handwrite-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(245, 244, 241, 0.35);
+  touch-action: none;
+}
+.handwrite-toolbar {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  z-index: 101;
+  display: flex;
+  gap: 8px;
+}
+.handwrite-btn {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.handwrite-btn.is-close {
+  background: var(--text);
+  color: white;
+  border-color: var(--text);
+}
+.handwrite-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
 
 .wrong-words {
   margin-top: 30px;
