@@ -5,6 +5,9 @@
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001'
 
+// 한 번에 많은 단어를 보내면 응답 생성에 시간이 걸릴 수 있어 함수 실행 시간을 넉넉히 잡는다.
+export const config = { maxDuration: 60 }
+
 const SYSTEM_PROMPT = `너는 일본어 학습자를 위한 단어장 정리 도우미다.
 사용자가 입력한 원문(단어 하나일 수도 있고, Notion에 정리해둔 여러 단어/문장이 뒤섞인 긴 텍스트일 수도 있음)에서
 일본어 단어(또는 표현)들을 찾아 아래 스키마의 JSON 배열로만 응답한다. 다른 설명, 마크다운, 코드블록 표시 없이 순수 JSON 배열만 출력한다.
@@ -57,7 +60,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -79,22 +82,44 @@ export default async function handler(req, res) {
     const textBlock = data?.content?.find((c) => c.type === 'text')
     const raw = textBlock?.text || ''
 
-    let entries
-    try {
-      // 혹시 모델이 코드블록으로 감싸서 줄 경우 대비한 방어적 파싱
-      const cleaned = raw.trim().replace(/^```json\s*|^```\s*|```$/g, '')
-      entries = JSON.parse(cleaned)
-    } catch (parseErr) {
+    const entries = parseEntries(raw)
+    if (entries === null) {
+      const truncated = data?.stop_reason === 'max_tokens'
       return res.status(502).json({
-        error: 'Claude 응답을 JSON으로 해석하지 못했습니다.',
-        raw,
+        error: truncated
+          ? '한 번에 보낸 단어 수가 너무 많아 응답이 중간에 잘렸습니다. 메모를 좀 더 잘게 나눠서 다시 시도해주세요.'
+          : 'Claude 응답을 JSON으로 해석하지 못했습니다.',
+        raw: raw.slice(0, 2000),
       })
     }
-
-    if (!Array.isArray(entries)) entries = [entries]
 
     return res.status(200).json({ entries })
   } catch (err) {
     return res.status(500).json({ error: `서버 오류: ${err.message}` })
   }
+}
+
+// 모델이 코드블록으로 감싸거나 앞뒤에 설명을 붙여서 줄 경우까지 방어적으로 파싱한다.
+function parseEntries(raw) {
+  const cleaned = raw.trim().replace(/^```json\s*|^```\s*|```\s*$/g, '')
+
+  try {
+    const parsed = JSON.parse(cleaned)
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch {
+    // 무시하고 아래 fallback으로
+  }
+
+  const start = cleaned.indexOf('[')
+  const end = cleaned.lastIndexOf(']')
+  if (start !== -1 && end !== -1 && end > start) {
+    try {
+      const parsed = JSON.parse(cleaned.slice(start, end + 1))
+      return Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      // 무시하고 null 반환
+    }
+  }
+
+  return null
 }

@@ -52,6 +52,10 @@ service cloud.firestore {
    Vercel 환경변수에 `CLAUDE_MODEL=claude-sonnet-5` 등으로 override 하면 됩니다.
    (모델 이름은 Anthropic이 주기적으로 구버전을 폐기하니, 나중에 또 `not_found_error`가 뜨면
    https://platform.claude.com/docs/en/about-claude/models/overview 에서 최신 모델 ID를 확인하세요.)
+4. 메모에 단어를 한 번에 아주 많이(수십 개) 적어두고 "단어장 업데이트"를 누르면, 앱이 자동으로
+   10줄씩 나눠서 여러 번 Claude API를 호출합니다(응답이 중간에 잘리는 것을 방지하기 위함).
+   그래도 "응답을 JSON으로 해석하지 못했습니다" 오류가 뜨면 일시적인 응답 오류일 수 있으니
+   한 번 더 시도해보시고, 계속되면 메모를 조금 나눠서 여러 번에 걸쳐 업데이트해주세요.
 
 ---
 

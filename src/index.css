@@ -209,6 +209,7 @@ button:disabled {
 }
 .error {
   color: var(--danger);
+  white-space: pre-line;
 }
 
 .preview-list {

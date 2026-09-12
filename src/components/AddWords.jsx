@@ -3,12 +3,25 @@ import { addWord, findDuplicate, updateWord } from '../utils/words'
 import { subscribeMemo, saveMemo } from '../utils/memo'
 
 const AUTOSAVE_DELAY = 700 // ms
+const LINES_PER_BATCH = 10 // 한 번의 Claude 호출에 보낼 최대 줄 수 (응답 잘림 방지)
+
+// 메모가 길면 한 번에 다 보내지 않고 줄 단위로 나눠서 여러 번 호출한다.
+function splitIntoBatches(text, linesPerBatch) {
+  const lines = text.split('\n').filter((l) => l.trim() !== '')
+  if (lines.length === 0) return []
+  const batches = []
+  for (let i = 0; i < lines.length; i += linesPerBatch) {
+    batches.push(lines.slice(i, i + linesPerBatch).join('\n'))
+  }
+  return batches
+}
 
 export default function AddWords({ uid, existingWords }) {
   const [rawText, setRawText] = useState('')
   const [memoLoaded, setMemoLoaded] = useState(false)
   const [saveState, setSaveState] = useState('idle') // 'idle' | 'saving' | 'saved'
   const [loading, setLoading] = useState(false)
+  const [genProgress, setGenProgress] = useState('')
   const [error, setError] = useState('')
   const [preview, setPreview] = useState(null) // 파싱된 항목 미리보기
   const [saving, setSaving] = useState(false)
@@ -59,16 +72,33 @@ export default function AddWords({ uid, existingWords }) {
     setLoading(true)
     setError('')
     setPreview(null)
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ rawText }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || '알 수 없는 오류')
 
-      const entries = (data.entries || []).map((e) => {
+    const batches = splitIntoBatches(rawText, LINES_PER_BATCH)
+    const allEntries = []
+
+    try {
+      for (let i = 0; i < batches.length; i++) {
+        if (batches.length > 1) {
+          setGenProgress(`생성 중... (${i + 1}/${batches.length})`)
+        }
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rawText: batches[i] }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          const base =
+            data.error || `알 수 없는 오류 (배치 ${i + 1}/${batches.length})`
+          const withPreview = data.raw
+            ? `${base}\n\n(응답 일부: ${data.raw.slice(0, 200)}...)`
+            : base
+          throw new Error(withPreview)
+        }
+        allEntries.push(...(data.entries || []))
+      }
+
+      const entries = allEntries.map((e) => {
         const dup = findDuplicate(existingWords, e.word)
         return {
           ...e,
@@ -79,8 +109,17 @@ export default function AddWords({ uid, existingWords }) {
       setPreview(entries)
     } catch (err) {
       setError(err.message)
+      // 이미 처리된 배치가 있으면 그 결과라도 보여준다.
+      if (allEntries.length > 0) {
+        const entries = allEntries.map((e) => {
+          const dup = findDuplicate(existingWords, e.word)
+          return { ...e, _dupId: dup ? dup.id : null, _include: true }
+        })
+        setPreview(entries)
+      }
     } finally {
       setLoading(false)
+      setGenProgress('')
     }
   }
 
@@ -153,7 +192,7 @@ export default function AddWords({ uid, existingWords }) {
 
       <div className="memo-actions">
         <button onClick={handleGenerate} disabled={loading || !rawText.trim()}>
-          {loading ? '생성 중...' : '단어장 업데이트'}
+          {loading ? genProgress || '생성 중...' : '단어장 업데이트'}
         </button>
         <button className="ghost-btn" onClick={handleClearMemo} disabled={!rawText}>
           메모 전체 지우기
