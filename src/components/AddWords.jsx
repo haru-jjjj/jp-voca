@@ -1,13 +1,58 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { addWord, findDuplicate, updateWord } from '../utils/words'
+import { subscribeMemo, saveMemo } from '../utils/memo'
+
+const AUTOSAVE_DELAY = 700 // ms
 
 export default function AddWords({ uid, existingWords }) {
   const [rawText, setRawText] = useState('')
+  const [memoLoaded, setMemoLoaded] = useState(false)
+  const [saveState, setSaveState] = useState('idle') // 'idle' | 'saving' | 'saved'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState(null) // 파싱된 항목 미리보기
   const [saving, setSaving] = useState(false)
   const [saveDone, setSaveDone] = useState(0)
+
+  const saveTimer = useRef(null)
+  const skipNextSave = useRef(false) // 서버에서 내려온 값으로 세팅할 때는 다시 저장하지 않기 위함
+
+  // 메모 내용을 Firestore와 실시간 동기화 (최초 진입 시 한 번 불러오고, 이후엔 로컬 상태가 기준)
+  useEffect(() => {
+    const unsub = subscribeMemo(uid, (content) => {
+      setRawText((prev) => {
+        if (!memoLoaded) {
+          skipNextSave.current = true
+          return content
+        }
+        return prev
+      })
+      setMemoLoaded(true)
+    })
+    return unsub
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid])
+
+  // 입력할 때마다 잠시 후 자동 저장 (메모장처럼 항상 남아 있도록)
+  useEffect(() => {
+    if (!memoLoaded) return
+    if (skipNextSave.current) {
+      skipNextSave.current = false
+      return
+    }
+    setSaveState('saving')
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await saveMemo(uid, rawText)
+        setSaveState('saved')
+      } catch {
+        setSaveState('idle')
+      }
+    }, AUTOSAVE_DELAY)
+    return () => clearTimeout(saveTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawText, memoLoaded, uid])
 
   async function handleGenerate() {
     if (!rawText.trim()) return
@@ -67,7 +112,8 @@ export default function AddWords({ uid, existingWords }) {
         setSaveDone((n) => n + 1)
       }
       setPreview(null)
-      setRawText('')
+      // 메모(원문)는 그대로 남겨둡니다 — 필요 없어진 부분만 직접 지우거나
+      // 아래 "메모 전체 지우기" 버튼으로 한 번에 비울 수 있습니다.
     } catch (err) {
       setError(err.message)
     } finally {
@@ -75,23 +121,44 @@ export default function AddWords({ uid, existingWords }) {
     }
   }
 
+  function handleClearMemo() {
+    if (!confirm('메모 내용을 전부 지울까요? (이미 저장된 단어장에는 영향 없음)')) return
+    setRawText('')
+  }
+
   return (
     <div className="panel">
-      <h2>단어 입력 / Notion 붙여넣기</h2>
-      <p className="hint">
-        단어 하나만 입력해도 되고, Notion에서 정리해둔 여러 단어·문장을 그대로
-        붙여넣어도 됩니다. &quot;단어장 업데이트&quot;를 누르면 자동으로
-        읽는법·뜻·예문을 채워서 정리해줍니다.
-      </p>
+      <div className="memo-head">
+        <div>
+          <h2>단어 메모장</h2>
+          <p className="hint">
+            떠오르는 단어나 Notion에서 정리해둔 내용을 자유롭게 적어두는 공간입니다.
+            내용은 자동 저장되며 새로고침하거나 나중에 다시 들어와도 그대로 남아 있습니다.
+            준비가 되면 아래 &quot;단어장 업데이트&quot;를 눌러 정리하세요.
+          </p>
+        </div>
+        <span className="save-indicator">
+          {saveState === 'saving' && '저장 중...'}
+          {saveState === 'saved' && '자동 저장됨'}
+        </span>
+      </div>
+
       <textarea
+        className="memo-textarea"
         value={rawText}
         onChange={(e) => setRawText(e.target.value)}
-        placeholder="예) 食べる&#10;또는 Notion에서 복사한 여러 줄의 텍스트"
-        rows={8}
+        placeholder="예) 食べる&#10;또는 Notion에서 복사한 여러 줄의 텍스트를 계속 이어서 적어두세요."
+        spellCheck={false}
       />
-      <button onClick={handleGenerate} disabled={loading || !rawText.trim()}>
-        {loading ? '생성 중...' : '단어장 업데이트'}
-      </button>
+
+      <div className="memo-actions">
+        <button onClick={handleGenerate} disabled={loading || !rawText.trim()}>
+          {loading ? '생성 중...' : '단어장 업데이트'}
+        </button>
+        <button className="ghost-btn" onClick={handleClearMemo} disabled={!rawText}>
+          메모 전체 지우기
+        </button>
+      </div>
       {error && <p className="error">{error}</p>}
 
       {preview && (

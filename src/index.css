@@ -143,7 +143,23 @@ input, textarea {
   font-size: 0.9rem;
 }
 
-/* ---------- Add Words ---------- */
+/* ---------- Add Words (메모장) ---------- */
+.memo-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.memo-head h2 {
+  margin-bottom: 4px;
+}
+.save-indicator {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+  padding-top: 4px;
+}
 textarea {
   width: 100%;
   padding: 12px;
@@ -152,7 +168,27 @@ textarea {
   resize: vertical;
   margin-bottom: 12px;
 }
+.memo-textarea {
+  min-height: 45vh;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+.memo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.ghost-btn {
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  font-weight: 500;
+}
 .panel > button,
+.memo-actions > button,
 .preview-list > button.primary {
   padding: 12px 20px;
   border: none;
@@ -160,6 +196,11 @@ textarea {
   background: var(--accent);
   color: white;
   font-weight: 600;
+}
+.memo-actions > button.ghost-btn {
+  background: transparent;
+  color: var(--text-soft);
+  border: 1px solid var(--border);
 }
 .panel > button:disabled,
 button:disabled {
@@ -435,6 +476,9 @@ button:disabled {
   }
   .word-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .memo-textarea {
+    min-height: 55vh;
   }
 }
 
