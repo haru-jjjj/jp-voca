@@ -143,6 +143,7 @@ export default function Review({ uid, words, stats }) {
               <p className="flash-hint">탭해서 답 보기</p>
             </div>
             <div className="flashcard-back">
+              <span className="flash-word">{current.word}</span>
               <p className="flash-reading">{current.reading}</p>
               <p className="flash-meaning">{current.meaning}</p>
               {current.uncertain && current.note && (
