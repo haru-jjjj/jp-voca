@@ -48,8 +48,10 @@ service cloud.firestore {
 1. https://console.anthropic.com 에서 로그인 후 **API Keys** 메뉴에서 키 발급 (`sk-ant-...`)
 2. 이 키는 절대 프론트엔드 코드나 GitHub에 커밋하지 마세요. **Vercel 환경변수로만 등록**합니다(3단계에서 진행).
 3. 비용이 걱정되시면 `api/generate.js` 상단의 `MODEL` 값이 기본적으로
-   저렴한 `claude-3-5-haiku-latest` 모델로 설정되어 있습니다. 결과 품질을 더 높이고 싶다면
-   Vercel 환경변수에 `CLAUDE_MODEL=claude-sonnet-4-5` 등으로 override 하면 됩니다.
+   저렴한 `claude-haiku-4-5-20251001` 모델로 설정되어 있습니다. 결과 품질을 더 높이고 싶다면
+   Vercel 환경변수에 `CLAUDE_MODEL=claude-sonnet-5` 등으로 override 하면 됩니다.
+   (모델 이름은 Anthropic이 주기적으로 구버전을 폐기하니, 나중에 또 `not_found_error`가 뜨면
+   https://platform.claude.com/docs/en/about-claude/models/overview 에서 최신 모델 ID를 확인하세요.)
 
 ---
 

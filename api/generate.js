@@ -3,7 +3,7 @@
 // Claude API에 보내 구조화된 일본어 단어장 항목 배열로 변환해서 돌려준다.
 // ANTHROPIC_API_KEY는 여기(서버)에서만 사용되고 브라우저에는 절대 노출되지 않는다.
 
-const MODEL = process.env.CLAUDE_MODEL || 'claude-3-5-haiku-latest'
+const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001'
 
 const SYSTEM_PROMPT = `너는 일본어 학습자를 위한 단어장 정리 도우미다.
 사용자가 입력한 원문(단어 하나일 수도 있고, Notion에 정리해둔 여러 단어/문장이 뒤섞인 긴 텍스트일 수도 있음)에서
