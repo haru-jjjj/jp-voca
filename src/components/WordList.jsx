@@ -3,14 +3,11 @@ import { deleteWord } from '../utils/words'
 import { speakJapanese } from '../utils/tts'
 import { AiFixButton, AiFixPanel } from './AiFixWord'
 import { EditButton, EditPanel } from './EditWord'
-import HandwritePad, { HandwriteButton } from './HandwritePad'
 
 export default function WordList({ uid, words }) {
   const [search, setSearch] = useState('')
   // 카드별로 어떤 수정 패널이 열려있는지: { [단어id]: 'edit' | 'ai' | undefined }
   const [openPanel, setOpenPanel] = useState({})
-  // 손글씨 연습판을 지금 열어둔 단어 id (한 번에 하나만)
-  const [handwriteId, setHandwriteId] = useState(null)
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -74,7 +71,6 @@ export default function WordList({ uid, words }) {
                   active={openPanel[w.id] === 'ai'}
                   onClick={() => togglePanel(w.id, 'ai')}
                 />
-                <HandwriteButton onClick={() => setHandwriteId(w.id)} />
                 <button
                   className="icon-btn danger"
                   title="삭제"
@@ -129,7 +125,6 @@ export default function WordList({ uid, words }) {
           </p>
         )}
       </div>
-      {handwriteId && <HandwritePad onClose={() => setHandwriteId(null)} />}
     </div>
   )
 }

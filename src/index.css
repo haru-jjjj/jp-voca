@@ -85,6 +85,17 @@ input, textarea {
   align-items: center;
   gap: 12px;
 }
+.handwrite-header-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 7px 9px;
+}
+.handwrite-header-btn:hover {
+  background: var(--accent-soft);
+}
 .due-badge {
   font-size: 0.8rem;
   background: var(--accent-soft);
@@ -664,9 +675,6 @@ button:disabled {
 .flash-example {
   margin-top: 10px;
   font-size: 0.9rem;
-}
-.handwrite-trigger {
-  margin: -4px 0 0;
 }
 .answer-buttons {
   display: grid;

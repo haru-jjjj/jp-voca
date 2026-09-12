@@ -5,7 +5,6 @@ import { recordReview } from '../utils/stats'
 import { speakJapanese } from '../utils/tts'
 import { AiFixButton, AiFixPanel } from './AiFixWord'
 import { EditButton, EditPanel } from './EditWord'
-import HandwritePad, { HandwriteButton } from './HandwritePad'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -26,23 +25,19 @@ export default function Review({ uid, words, stats }) {
   const [sessionCount, setSessionCount] = useState(0)
   const [activePanel, setActivePanel] = useState(null) // null | 'edit' | 'ai'
   const [wrongOpenPanel, setWrongOpenPanel] = useState({}) // { [단어id]: 'edit' | 'ai' | undefined }
-  const [showHandwrite, setShowHandwrite] = useState(false) // 지금 복습 중인 카드용 연습판
-  const [wrongHandwriteId, setWrongHandwriteId] = useState(null) // 헷갈리는 단어 카드용 연습판
 
   function restart() {
     setQueue(shuffle(words.filter((w) => isDue(w.srs))))
     setFlipped(false)
     setSessionCount(0)
     setActivePanel(null)
-    setShowHandwrite(false)
   }
 
   const current = queue[0]
 
-  // 카드가 바뀌면 이전 카드에서 열어둔 수정 패널/연습판은 닫아준다.
+  // 카드가 바뀌면 이전 카드에서 열어둔 수정 패널은 닫아준다.
   useEffect(() => {
     setActivePanel(null)
-    setShowHandwrite(false)
   }, [current?.id])
 
   async function handleAnswer(quality) {
@@ -56,7 +51,6 @@ export default function Review({ uid, words, stats }) {
     setSessionCount((n) => n + 1)
     setFlipped(false)
     setActivePanel(null)
-    setShowHandwrite(false)
 
     setQueue((prev) => {
       const rest = prev.slice(1)
@@ -159,13 +153,6 @@ export default function Review({ uid, words, stats }) {
             </div>
           </div>
 
-          <button
-            className="link-btn handwrite-trigger"
-            onClick={() => setShowHandwrite(true)}
-          >
-            ✍️ 손글씨로 연습해보기
-          </button>
-
           {flipped && (
             <div className="review-fix-wrap">
               <div className="review-fix-buttons">
@@ -213,10 +200,6 @@ export default function Review({ uid, words, stats }) {
               </button>
             </div>
           )}
-
-          {showHandwrite && (
-            <HandwritePad onClose={() => setShowHandwrite(false)} />
-          )}
         </div>
       )}
 
@@ -255,7 +238,6 @@ export default function Review({ uid, words, stats }) {
                       active={wrongOpenPanel[w.id] === 'ai'}
                       onClick={() => toggleWrongPanel(w.id, 'ai')}
                     />
-                    <HandwriteButton onClick={() => setWrongHandwriteId(w.id)} />
                     <button
                       className="icon-btn danger"
                       title="삭제"
@@ -303,10 +285,6 @@ export default function Review({ uid, words, stats }) {
             ))}
           </div>
         </div>
-      )}
-
-      {wrongHandwriteId && (
-        <HandwritePad onClose={() => setWrongHandwriteId(null)} />
       )}
     </div>
   )

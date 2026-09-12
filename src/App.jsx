@@ -5,6 +5,7 @@ import { subscribeStats } from './utils/stats'
 import AddWords from './components/AddWords'
 import WordList from './components/WordList'
 import Review from './components/Review'
+import HandwritePad from './components/HandwritePad'
 
 const TABS = [
   { key: 'add', label: '단어 입력', icon: '✏️' },
@@ -17,6 +18,7 @@ export default function App() {
   const [words, setWords] = useState([])
   const [stats, setStats] = useState({ streak: 0, todayCount: 0, todayDate: '' })
   const [tab, setTab] = useState('add')
+  const [showHandwrite, setShowHandwrite] = useState(false)
 
   useEffect(() => {
     const unsubWords = subscribeWords(uid, setWords)
@@ -36,6 +38,13 @@ export default function App() {
       <header className="app-header">
         <h1>日本語 단어장</h1>
         <div className="header-right">
+          <button
+            className="handwrite-header-btn"
+            title="손글씨 연습판"
+            onClick={() => setShowHandwrite(true)}
+          >
+            ✍️
+          </button>
           <span className="due-badge">{dueCount > 0 ? `복습 ${dueCount}` : '복습 완료'}</span>
         </div>
       </header>
@@ -61,6 +70,10 @@ export default function App() {
         {tab === 'list' && <WordList uid={uid} words={words} />}
         {tab === 'review' && <Review uid={uid} words={words} stats={stats} />}
       </main>
+
+      {showHandwrite && (
+        <HandwritePad onClose={() => setShowHandwrite(false)} />
+      )}
     </div>
   )
 }
