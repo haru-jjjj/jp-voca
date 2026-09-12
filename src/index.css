@@ -69,6 +69,12 @@ input, textarea {
   padding-bottom: 14px;
   padding-left: max(20px, env(safe-area-inset-left, 0px));
   padding-right: max(20px, env(safe-area-inset-right, 0px));
+  /* 헤더가 스크롤에 딸려 올라가버리면, 그 아래 내용이 상태 표시줄과 겹치게 된다.
+     헤더를 화면 위쪽에 고정해서 항상 상태 표시줄 영역을 가려주도록 한다. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
 }
 .app-header h1 {
   font-size: 1.25rem;
