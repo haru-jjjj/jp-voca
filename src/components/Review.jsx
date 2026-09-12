@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { updateWord } from '../utils/words'
+import { deleteWord, updateWord } from '../utils/words'
 import { nextSrs, isDue } from '../utils/srs'
 import { recordReview } from '../utils/stats'
 import { speakJapanese } from '../utils/tts'
@@ -24,6 +24,7 @@ export default function Review({ uid, words, stats }) {
   const [flipped, setFlipped] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const [activePanel, setActivePanel] = useState(null) // null | 'edit' | 'ai'
+  const [wrongOpenPanel, setWrongOpenPanel] = useState({}) // { [단어id]: 'edit' | 'ai' | undefined }
 
   function restart() {
     setQueue(shuffle(words.filter((w) => isDue(w.srs))))
@@ -65,6 +66,19 @@ export default function Review({ uid, words, stats }) {
   }
 
   const wrongWords = words.filter((w) => (w.wrongStreak || 0) >= 2)
+
+  async function handleDeleteWrong(id) {
+    if (!confirm('이 단어를 삭제할까요?')) return
+    await deleteWord(uid, id)
+  }
+
+  function toggleWrongPanel(id, panel) {
+    setWrongOpenPanel((prev) => ({ ...prev, [id]: prev[id] === panel ? null : panel }))
+  }
+
+  function closeWrongPanel(id) {
+    setWrongOpenPanel((prev) => ({ ...prev, [id]: null }))
+  }
 
   return (
     <div className="panel">
@@ -191,6 +205,9 @@ export default function Review({ uid, words, stats }) {
       {wrongWords.length > 0 && (
         <div className="wrong-words">
           <h3>헷갈리는 단어 ({wrongWords.length})</h3>
+          <p className="hint">
+            "다시(몰랐음)"을 2번 연속 고른 단어가 자동으로 모여요. 복습에서 한 번이라도 맞히면 사라집니다.
+          </p>
           <div className="word-grid">
             {wrongWords.map((w) => (
               <div className="word-card" key={w.id}>
@@ -198,12 +215,71 @@ export default function Review({ uid, words, stats }) {
                   <div>
                     <span className="word-main">{w.word}</span>
                     <span className="word-reading">（{w.reading}）</span>
+                    {w.uncertain && (
+                      <span className="uncertain-badge" title={w.note || '확신이 낮은 항목이에요'}>
+                        ⚠️ 확인 필요
+                      </span>
+                    )}
                   </div>
-                  <button className="icon-btn" onClick={() => speakJapanese(w.word)}>
-                    🔊
-                  </button>
+                  <div className="word-actions">
+                    <button
+                      className="icon-btn"
+                      title="발음 듣기"
+                      onClick={() => speakJapanese(w.word)}
+                    >
+                      🔊
+                    </button>
+                    <EditButton
+                      active={wrongOpenPanel[w.id] === 'edit'}
+                      onClick={() => toggleWrongPanel(w.id, 'edit')}
+                    />
+                    <AiFixButton
+                      active={wrongOpenPanel[w.id] === 'ai'}
+                      onClick={() => toggleWrongPanel(w.id, 'ai')}
+                    />
+                    <button
+                      className="icon-btn danger"
+                      title="삭제"
+                      onClick={() => handleDeleteWrong(w.id)}
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </div>
                 <p className="word-meaning">{w.meaning}</p>
+                {w.uncertain && w.note && <p className="uncertain-note">⚠️ {w.note}</p>}
+                {w.example && (
+                  <div className="word-example">
+                    <div className="example-jp">
+                      <span>{w.example}</span>
+                      <button
+                        className="icon-btn small"
+                        title="예문 듣기"
+                        onClick={() => speakJapanese(w.example)}
+                      >
+                        🔊
+                      </button>
+                    </div>
+                    <p className="example-reading">{w.exampleReading}</p>
+                    <p className="example-meaning">{w.exampleMeaning}</p>
+                  </div>
+                )}
+                {wrongOpenPanel[w.id] === 'edit' && (
+                  <EditPanel
+                    uid={uid}
+                    word={w}
+                    onClose={() => closeWrongPanel(w.id)}
+                    onSaved={() => closeWrongPanel(w.id)}
+                  />
+                )}
+                {wrongOpenPanel[w.id] === 'ai' && (
+                  <AiFixPanel
+                    uid={uid}
+                    word={w}
+                    onClose={() => closeWrongPanel(w.id)}
+                    onSaved={() => closeWrongPanel(w.id)}
+                  />
+                )}
               </div>
             ))}
           </div>
