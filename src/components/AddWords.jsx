@@ -85,43 +85,60 @@ export default function AddWords({ uid, existingWords }) {
 
   const saveTimer = useRef(null)
   const skipNextSave = useRef(false) // 서버에서 내려온 값으로 세팅할 때는 다시 저장하지 않기 위함
-
-  // 메모 내용을 Firestore와 실시간 동기화 (최초 진입 시 한 번 불러오고, 이후엔 로컬 상태가 기준)
+  // Firestore의 onSnapshot은 "최초 로딩"뿐 아니라, 우리가 직접 쓴 내용이 반영될 때도
+  // (로컬 캐시 즉시 반영 + 서버 확인) 매번 다시 호출된다. 최초 진입 시 딱 한 번만 서버 내용으로
+  // 화면을 채우고, 그 이후에는 지금 입력 중인 로컬 내용을 그대로 신뢰해야 한다.
+  // 이 판단을 React state(memoLoaded)로 하면, 아래 구독 useEffect는 [uid]에만 의존해서
+  // 마운트 시 딱 한 번만 실행되므로 콜백 안에서 참조하는 state는 항상 마운트 시점(false)의
+  // 오래된 값으로 고정되는 "stale closure" 문제가 생긴다 — 그러면 자동저장 왕복 응답이 올
+  // 때마다 매번 "아직 최초 로딩 전"으로 잘못 판단해서, 방금 입력 중이던 내용을 서버의
+  // (그보다 약간 더 오래된) 내용으로 계속 덮어써버려 타이핑 중간이 잘려나가는 데이터 유실이
+  // 발생했다. ref는 클로저와 무관하게 항상 최신값을 참조하므로 이 문제가 없다.
+  const firstSnapshotHandledRef = useRef(false)
+  // 문서 로딩이 끝나기 전에 사용자가 이미 타이핑을 시작했다면, 그 이후 서버 내용이 도착해도
+  // 사용자가 입력한 내용을 덮어쓰지 않는다(로딩 중 입력이 통째로 날아가는 것을 방지).
+  const userEditedRef = useRef(false)
+  // 디바운스 타이머가 아직 안 끝난 최신 rawText를 참조하기 위한 ref (아래 flush에서 사용).
+  const rawTextRef = useRef('')
   useEffect(() => {
+    rawTextRef.current = rawText
+  }, [rawText])
+
+  // 메모 내용을 Firestore와 실시간 동기화 (최초 진입 시 한 번만 불러오고, 이후엔 로컬 상태가 기준)
+  useEffect(() => {
+    firstSnapshotHandledRef.current = false
     const unsub = subscribeMemo(uid, ({ content, processedLines: loaded, pendingPreview }) => {
-      setRawText((prev) => {
-        if (!memoLoaded) {
-          skipNextSave.current = true
-          return content
-        }
-        return prev
-      })
-      if (!memoLoaded) {
-        setProcessedLines(loaded)
-        // 지난번에 저장 전/저장 도중 끊긴 미리보기가 있으면 그대로 복원한다.
-        // (없었던 일처럼 사라지면, 실제로는 저장 안 된 단어를 사용자가 저장됐다고 착각하게 된다.)
-        // 단, 예전 버전에서 생긴 수백 개짜리 미리보기가 남아있을 수도 있으므로
-        // 복원할 때도 안전한 개수로 잘라서, 열자마자 화면이 멈추는 일이 없게 한다.
-        if (pendingPreview && Array.isArray(pendingPreview.entries) && pendingPreview.entries.length > 0) {
-          const batchesLines = (pendingPreview.batches || []).map((b) => b.lines || [])
-          const { kept, droppedCount } = capEntriesForSafety(
-            pendingPreview.entries,
-            MAX_NEW_LINES_PER_RUN
+      if (firstSnapshotHandledRef.current) return
+      firstSnapshotHandledRef.current = true
+
+      if (!userEditedRef.current) {
+        skipNextSave.current = true
+        setRawText(content)
+      }
+      setProcessedLines(loaded)
+      // 지난번에 저장 전/저장 도중 끊긴 미리보기가 있으면 그대로 복원한다.
+      // (없었던 일처럼 사라지면, 실제로는 저장 안 된 단어를 사용자가 저장됐다고 착각하게 된다.)
+      // 단, 예전 버전에서 생긴 수백 개짜리 미리보기가 남아있을 수도 있으므로
+      // 복원할 때도 안전한 개수로 잘라서, 열자마자 화면이 멈추는 일이 없게 한다.
+      if (pendingPreview && Array.isArray(pendingPreview.entries) && pendingPreview.entries.length > 0) {
+        const batchesLines = (pendingPreview.batches || []).map((b) => b.lines || [])
+        const { kept, droppedCount } = capEntriesForSafety(
+          pendingPreview.entries,
+          MAX_NEW_LINES_PER_RUN
+        )
+        setPreview(kept)
+        setPreviewBatches(batchesLines)
+        setRestoredNotice(true)
+        if (droppedCount > 0) {
+          setInfoMsg(
+            `이전 미리보기가 너무 많아(${pendingPreview.entries.length}개) 일부만 복원했습니다. ` +
+              `나머지 ${droppedCount}개는 메모에 그대로 남아있으니 "단어장 업데이트"를 다시 눌러 이어서 처리해주세요.`
           )
-          setPreview(kept)
-          setPreviewBatches(batchesLines)
-          setRestoredNotice(true)
-          if (droppedCount > 0) {
-            setInfoMsg(
-              `이전 미리보기가 너무 많아(${pendingPreview.entries.length}개) 일부만 복원했습니다. ` +
-                `나머지 ${droppedCount}개는 메모에 그대로 남아있으니 "단어장 업데이트"를 다시 눌러 이어서 처리해주세요.`
-            )
-            // 잘라낸 나머지는 그대로 저장해두지 않는다 — 다음에 열 때마다 또 잘려나가는 게 아니라
-            // 남은 항목을 정상적인 "단어장 업데이트" 흐름(캡 적용됨)으로 다시 생성하게 한다.
-            savePendingPreview(uid, { entries: kept, batches: pendingPreview.batches || [] }).catch(
-              () => {}
-            )
-          }
+          // 잘라낸 나머지는 그대로 저장해두지 않는다 — 다음에 열 때마다 또 잘려나가는 게 아니라
+          // 남은 항목을 정상적인 "단어장 업데이트" 흐름(캡 적용됨)으로 다시 생성하게 한다.
+          savePendingPreview(uid, { entries: kept, batches: pendingPreview.batches || [] }).catch(
+            () => {}
+          )
         }
       }
       setMemoLoaded(true)
@@ -150,6 +167,28 @@ export default function AddWords({ uid, existingWords }) {
     return () => clearTimeout(saveTimer.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawText, memoLoaded, uid])
+
+  // 모바일에서는 다른 앱으로 전환하거나 탭을 벗어나는 순간 700ms 디바운스 타이머가
+  // 아직 끝나기 전에 브라우저/앱이 그대로 종료되는 경우가 있다 — 이러면 마지막으로
+  // 입력한 몇 글자(또는 붙여넣은 내용 일부)가 자동저장되지 못한 채 그냥 유실된다.
+  // 화면이 안 보이게 되는 시점(visibilitychange)과 페이지가 실제로 닫히는 시점(pagehide)
+  // 모두에서 디바운스를 기다리지 않고 즉시 저장을 시도해서 이 창을 최대한 줄인다.
+  useEffect(() => {
+    function flush() {
+      if (!memoLoaded) return
+      clearTimeout(saveTimer.current)
+      saveMemo(uid, rawTextRef.current).catch(() => {})
+    }
+    function handleVisibilityChange() {
+      if (document.hidden) flush()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [uid, memoLoaded])
 
   // 미리보기를 편집(필드 수정/포함 체크 해제)할 때도 서버에 계속 반영해서,
   // 새로고침해도 편집 중이던 내용과 진행 상황을 그대로 이어갈 수 있게 한다.
@@ -439,7 +478,10 @@ export default function AddWords({ uid, existingWords }) {
       <textarea
         className="memo-textarea"
         value={rawText}
-        onChange={(e) => setRawText(e.target.value)}
+        onChange={(e) => {
+          userEditedRef.current = true
+          setRawText(e.target.value)
+        }}
         placeholder={
           '예) 食べる\n' +
           '諦める（あきらめる）- 드라마에서 들음\n' +
