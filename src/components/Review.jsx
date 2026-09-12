@@ -95,6 +95,20 @@ export default function Review({ uid, words, stats }) {
               >
                 🔊
               </button>
+              {current.example && (
+                <div className="flash-example-front">
+                  <span>{current.example}</span>
+                  <button
+                    className="icon-btn small"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      speakJapanese(current.example)
+                    }}
+                  >
+                    🔊
+                  </button>
+                </div>
+              )}
               <p className="flash-hint">탭해서 답 보기</p>
             </div>
             <div className="flashcard-back">

@@ -1,23 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { addWord, findDuplicate, updateWord } from '../utils/words'
-import { subscribeMemo, saveMemo } from '../utils/memo'
+import { subscribeMemo, saveMemo, saveProcessedLines, clearMemo } from '../utils/memo'
 
 const AUTOSAVE_DELAY = 700 // ms
 const LINES_PER_BATCH = 10 // 한 번의 Claude 호출에 보낼 최대 줄 수 (응답 잘림 방지)
 
-// 메모가 길면 한 번에 다 보내지 않고 줄 단위로 나눠서 여러 번 호출한다.
-function splitIntoBatches(text, linesPerBatch) {
-  const lines = text.split('\n').filter((l) => l.trim() !== '')
-  if (lines.length === 0) return []
+function getLines(text) {
+  return text.split('\n').filter((l) => l.trim() !== '')
+}
+
+// 배치가 너무 길면 한 번에 다 보내지 않고 줄 단위로 나눠서 여러 번 호출한다.
+function splitIntoBatches(lines, linesPerBatch) {
   const batches = []
   for (let i = 0; i < lines.length; i += linesPerBatch) {
-    batches.push(lines.slice(i, i + linesPerBatch).join('\n'))
+    batches.push(lines.slice(i, i + linesPerBatch))
   }
   return batches
 }
 
 export default function AddWords({ uid, existingWords }) {
   const [rawText, setRawText] = useState('')
+  const [processedLines, setProcessedLines] = useState([]) // 이미 Claude에 보낸 적 있는 줄들
   const [memoLoaded, setMemoLoaded] = useState(false)
   const [saveState, setSaveState] = useState('idle') // 'idle' | 'saving' | 'saved'
   const [loading, setLoading] = useState(false)
@@ -32,7 +35,7 @@ export default function AddWords({ uid, existingWords }) {
 
   // 메모 내용을 Firestore와 실시간 동기화 (최초 진입 시 한 번 불러오고, 이후엔 로컬 상태가 기준)
   useEffect(() => {
-    const unsub = subscribeMemo(uid, (content) => {
+    const unsub = subscribeMemo(uid, ({ content, processedLines: loaded }) => {
       setRawText((prev) => {
         if (!memoLoaded) {
           skipNextSave.current = true
@@ -40,6 +43,7 @@ export default function AddWords({ uid, existingWords }) {
         }
         return prev
       })
+      setProcessedLines((prev) => (memoLoaded ? prev : loaded))
       setMemoLoaded(true)
     })
     return unsub
@@ -68,13 +72,27 @@ export default function AddWords({ uid, existingWords }) {
   }, [rawText, memoLoaded, uid])
 
   async function handleGenerate() {
-    if (!rawText.trim()) return
+    const allLines = getLines(rawText)
+    if (allLines.length === 0) return
+
+    const processedSet = new Set(processedLines)
+    const newLines = allLines.filter((l) => !processedSet.has(l))
+
+    if (newLines.length === 0) {
+      setError(
+        '새로 추가되거나 수정된 줄이 없습니다 — 이미 전부 처리된 메모입니다. ' +
+          '다시 분석하고 싶으면 아래 "전체 다시 분석"을 눌러주세요.'
+      )
+      return
+    }
+
     setLoading(true)
     setError('')
     setPreview(null)
 
-    const batches = splitIntoBatches(rawText, LINES_PER_BATCH)
+    const batches = splitIntoBatches(newLines, LINES_PER_BATCH)
     const allEntries = []
+    const succeededLines = []
 
     try {
       for (let i = 0; i < batches.length; i++) {
@@ -84,7 +102,7 @@ export default function AddWords({ uid, existingWords }) {
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ rawText: batches[i] }),
+          body: JSON.stringify({ rawText: batches[i].join('\n') }),
         })
         const data = await res.json()
         if (!res.ok) {
@@ -96,6 +114,7 @@ export default function AddWords({ uid, existingWords }) {
           throw new Error(withPreview)
         }
         allEntries.push(...(data.entries || []))
+        succeededLines.push(...batches[i])
       }
 
       const entries = allEntries.map((e) => {
@@ -120,6 +139,30 @@ export default function AddWords({ uid, existingWords }) {
     } finally {
       setLoading(false)
       setGenProgress('')
+
+      // 성공적으로 처리된 줄만 "처리 완료"로 기록해서, 다음 업데이트 때 다시 보내지 않도록 한다.
+      // (메모에서 이미 지워진 줄은 목록에서 자연스럽게 빠지도록 현재 메모와 교집합을 취한다)
+      if (succeededLines.length > 0) {
+        const stillPresent = allLines.filter((l) => processedSet.has(l))
+        const updated = Array.from(new Set([...stillPresent, ...succeededLines]))
+        setProcessedLines(updated)
+        saveProcessedLines(uid, updated).catch(() => {})
+      }
+    }
+  }
+
+  async function handleReanalyzeAll() {
+    if (
+      !confirm(
+        '처리 기록을 초기화하고 메모 전체를 다시 분석 대상으로 만들까요? (메모 내용 자체는 지워지지 않습니다)'
+      )
+    )
+      return
+    setProcessedLines([])
+    try {
+      await saveProcessedLines(uid, [])
+    } catch {
+      // 무시 — 로컬 상태는 이미 갱신됨
     }
   }
 
@@ -163,6 +206,8 @@ export default function AddWords({ uid, existingWords }) {
   function handleClearMemo() {
     if (!confirm('메모 내용을 전부 지울까요? (이미 저장된 단어장에는 영향 없음)')) return
     setRawText('')
+    setProcessedLines([])
+    clearMemo(uid).catch(() => {})
   }
 
   return (
@@ -173,7 +218,8 @@ export default function AddWords({ uid, existingWords }) {
           <p className="hint">
             떠오르는 단어나 Notion에서 정리해둔 내용을 자유롭게 적어두는 공간입니다.
             내용은 자동 저장되며 새로고침하거나 나중에 다시 들어와도 그대로 남아 있습니다.
-            준비가 되면 아래 &quot;단어장 업데이트&quot;를 눌러 정리하세요.
+            &quot;단어장 업데이트&quot;를 누르면 <b>새로 추가되거나 수정된 줄만</b> 분석하니,
+            메모가 길어져도 API 호출과 대기 시간이 늘어나지 않습니다.
           </p>
         </div>
         <span className="save-indicator">
@@ -196,6 +242,13 @@ export default function AddWords({ uid, existingWords }) {
         </button>
         <button className="ghost-btn" onClick={handleClearMemo} disabled={!rawText}>
           메모 전체 지우기
+        </button>
+        <button
+          className="ghost-btn"
+          onClick={handleReanalyzeAll}
+          disabled={loading || processedLines.length === 0}
+        >
+          전체 다시 분석
         </button>
       </div>
       {error && <p className="error">{error}</p>}
