@@ -10,6 +10,11 @@ import {
 
 const AUTOSAVE_DELAY = 700 // ms
 const LINES_PER_BATCH = 10 // 한 번의 Claude 호출에 보낼 최대 줄 수 (응답 잘림 방지)
+// 한 번의 "단어장 업데이트" 클릭에서 처리할 최대 줄 수.
+// 이 제한이 없으면 메모에 새 내용이 잔뜩 쌓여있을 때 수백 개짜리 미리보기가 한 번에 생겨서
+// (카드 하나당 입력창 6개 × 수백 개 = DOM이 수천 개) 폰 브라우저가 버벅이다 멈추는 문제가 있었다.
+// 남은 줄이 있으면 안내 메시지를 보여주고, 사용자가 "단어장 업데이트"를 다시 눌러 이어서 처리하게 한다.
+const MAX_NEW_LINES_PER_RUN = 30
 
 function getLines(text) {
   return text.split('\n').filter((l) => l.trim() !== '')
@@ -46,6 +51,23 @@ function computeResolvedBatchIdxs(preview) {
   return resolved
 }
 
+// 미리보기 카드 하나당 입력창 6개가 그려지므로, 항목이 너무 많으면 화면(특히 모바일)이
+// 감당 못 하고 멈춰버릴 수 있다. 배치 단위로 앞에서부터 maxEntries개 정도까지만 남기고
+// 나머지는 잘라낸다 — 잘려나간 배치의 원본 줄은 처리 완료로 표시되지 않으므로 유실되지 않고,
+// 다음 "단어장 업데이트"에서 자동으로 이어서 처리된다.
+function capEntriesForSafety(entries, maxEntries) {
+  const batchIdxs = [...new Set(entries.map((e) => e._batchIdx))].sort((a, b) => a - b)
+  const kept = []
+  let count = 0
+  for (const bi of batchIdxs) {
+    const batchEntries = entries.filter((e) => e._batchIdx === bi)
+    if (count > 0 && count + batchEntries.length > maxEntries) break
+    kept.push(...batchEntries)
+    count += batchEntries.length
+  }
+  return { kept, droppedCount: entries.length - kept.length }
+}
+
 export default function AddWords({ uid, existingWords }) {
   const [rawText, setRawText] = useState('')
   const [processedLines, setProcessedLines] = useState([]) // 실제로 단어장 저장까지 끝난 줄들
@@ -59,6 +81,7 @@ export default function AddWords({ uid, existingWords }) {
   const [saving, setSaving] = useState(false)
   const [saveDone, setSaveDone] = useState(0)
   const [restoredNotice, setRestoredNotice] = useState(false)
+  const [infoMsg, setInfoMsg] = useState('')
 
   const saveTimer = useRef(null)
   const skipNextSave = useRef(false) // 서버에서 내려온 값으로 세팅할 때는 다시 저장하지 않기 위함
@@ -77,10 +100,28 @@ export default function AddWords({ uid, existingWords }) {
         setProcessedLines(loaded)
         // 지난번에 저장 전/저장 도중 끊긴 미리보기가 있으면 그대로 복원한다.
         // (없었던 일처럼 사라지면, 실제로는 저장 안 된 단어를 사용자가 저장됐다고 착각하게 된다.)
+        // 단, 예전 버전에서 생긴 수백 개짜리 미리보기가 남아있을 수도 있으므로
+        // 복원할 때도 안전한 개수로 잘라서, 열자마자 화면이 멈추는 일이 없게 한다.
         if (pendingPreview && Array.isArray(pendingPreview.entries) && pendingPreview.entries.length > 0) {
-          setPreview(pendingPreview.entries)
-          setPreviewBatches((pendingPreview.batches || []).map((b) => b.lines || []))
+          const batchesLines = (pendingPreview.batches || []).map((b) => b.lines || [])
+          const { kept, droppedCount } = capEntriesForSafety(
+            pendingPreview.entries,
+            MAX_NEW_LINES_PER_RUN
+          )
+          setPreview(kept)
+          setPreviewBatches(batchesLines)
           setRestoredNotice(true)
+          if (droppedCount > 0) {
+            setInfoMsg(
+              `이전 미리보기가 너무 많아(${pendingPreview.entries.length}개) 일부만 복원했습니다. ` +
+                `나머지 ${droppedCount}개는 메모에 그대로 남아있으니 "단어장 업데이트"를 다시 눌러 이어서 처리해주세요.`
+            )
+            // 잘라낸 나머지는 그대로 저장해두지 않는다 — 다음에 열 때마다 또 잘려나가는 게 아니라
+            // 남은 항목을 정상적인 "단어장 업데이트" 흐름(캡 적용됨)으로 다시 생성하게 한다.
+            savePendingPreview(uid, { entries: kept, batches: pendingPreview.batches || [] }).catch(
+              () => {}
+            )
+          }
         }
       }
       setMemoLoaded(true)
@@ -154,9 +195,9 @@ export default function AddWords({ uid, existingWords }) {
     }
 
     const processedSet = new Set(processedLines)
-    const newLines = allLines.filter((l) => !processedSet.has(l))
+    const allNewLines = allLines.filter((l) => !processedSet.has(l))
 
-    if (newLines.length === 0) {
+    if (allNewLines.length === 0) {
       setError(
         '새로 추가되거나 수정된 줄이 없습니다 — 이미 전부 단어장에 저장된 메모입니다. ' +
           '다시 분석하고 싶으면 아래 "전체 다시 분석"을 눌러주세요.'
@@ -164,8 +205,13 @@ export default function AddWords({ uid, existingWords }) {
       return
     }
 
+    // 한 번에 너무 많은 줄을 처리하면 미리보기 카드가 넘쳐나 화면이 멈출 수 있으므로 잘라서 처리한다.
+    const newLines = allNewLines.slice(0, MAX_NEW_LINES_PER_RUN)
+    const remainingAfterThisRun = allNewLines.length - newLines.length
+
     setLoading(true)
     setError('')
+    setInfoMsg('')
     setPreview(null)
     setPreviewBatches([])
     setRestoredNotice(false)
@@ -218,7 +264,7 @@ export default function AddWords({ uid, existingWords }) {
 
     if (allEntries.length === 0) return
 
-    const entries = allEntries.map((e) => {
+    const entriesRaw = allEntries.map((e) => {
       const dup = findDuplicate(existingWords, e.word)
       return {
         ...e,
@@ -228,12 +274,25 @@ export default function AddWords({ uid, existingWords }) {
         _error: null,
       }
     })
+    // 방어적으로 한 번 더 캡을 건다 (배치 하나가 예상보다 많은 항목을 반환하는 경우 대비).
+    const { kept: entries, droppedCount: extraDropped } = capEntriesForSafety(
+      entriesRaw,
+      MAX_NEW_LINES_PER_RUN
+    )
     setPreview(entries)
     setPreviewBatches(succeededBatchLines)
     savePendingPreview(uid, {
       entries,
       batches: succeededBatchLines.map((lines) => ({ lines })),
     }).catch(() => {})
+
+    const totalRemaining = remainingAfterThisRun + extraDropped
+    if (totalRemaining > 0) {
+      setInfoMsg(
+        `이번에는 ${entries.length}개만 처리했어요. 아직 처리하지 않은 줄이 ${totalRemaining}개 더 있어요 — ` +
+          '지금 항목을 저장한 뒤 "단어장 업데이트"를 다시 눌러 이어서 처리해주세요.'
+      )
+    }
   }
 
   async function handleReanalyzeAll() {
@@ -340,6 +399,19 @@ export default function AddWords({ uid, existingWords }) {
     }
   }
 
+  // 미리보기가 너무 커져서 화면이 버벅이거나, 더 이상 필요 없을 때 메모 내용은 그대로 두고
+  // 미리보기만 안전하게 비운다. 아직 저장 안 된 항목의 원본 줄은 처리 완료 표시가 안 돼 있으므로
+  // 나중에 "단어장 업데이트"를 다시 누르면 정상적으로(캡 적용된 채로) 다시 처리된다.
+  function handleDiscardPreview() {
+    if (!confirm('미리보기를 비울까요? (아직 저장 안 된 항목은 메모에 남아 다음에 다시 처리됩니다)'))
+      return
+    setPreview(null)
+    setPreviewBatches([])
+    setRestoredNotice(false)
+    setInfoMsg('')
+    savePendingPreview(uid, null).catch(() => {})
+  }
+
   function handleClearMemo() {
     if (!confirm('메모 내용을 전부 지울까요? (이미 저장된 단어장에는 영향 없음)')) return
     setRawText('')
@@ -386,78 +458,85 @@ export default function AddWords({ uid, existingWords }) {
         </button>
       </div>
       {error && <p className="error">{error}</p>}
+      {infoMsg && <p className="restored-notice">{infoMsg}</p>}
 
       {preview && (
         <div className="preview-list">
-          <h3>미리보기 ({preview.length}개 항목)</h3>
+          <div className="preview-list-head">
+            <h3>미리보기 ({preview.length}개 항목)</h3>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={handleDiscardPreview}
+              disabled={saving}
+            >
+              미리보기 취소
+            </button>
+          </div>
           {restoredNotice && (
             <p className="restored-notice">
               이전에 저장하지 못하고 남아있던 항목을 복원했어요. 확인 후 다시 저장해주세요.
             </p>
           )}
-          {preview.map((entry, idx) => (
-            <div
-              key={idx}
-              className={`preview-card ${entry._dupId ? 'is-dup' : ''} ${
-                !entry._include ? 'is-excluded' : ''
-              } ${entry._saved ? 'is-saved' : ''} ${entry._error ? 'has-error' : ''}`}
-            >
-              <div className="preview-card-head">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={entry._include}
-                    disabled={entry._saved}
-                    onChange={() => toggleInclude(idx)}
-                  />
-                  {entry._saved
-                    ? '저장 완료'
-                    : entry._dupId
-                      ? '기존 단어 업데이트'
-                      : '새 단어 추가'}
-                </label>
+          {preview.map((entry, idx) =>
+            entry._saved ? (
+              // 이미 저장된 항목은 입력창을 다시 그리지 않고 한 줄 요약만 보여준다.
+              // (항목이 많을 때 매번 전체를 다시 그리면 화면이 버벅이는 걸 줄이기 위함)
+              <div key={idx} className="preview-card is-saved is-compact">
+                <span>✅ {entry.word}</span>
+                <span className="hint">저장 완료</span>
               </div>
-              {entry._error && (
-                <p className="entry-error">저장 실패: {entry._error}</p>
-              )}
-              <Field
-                label="단어"
-                value={entry.word}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'word', v)}
-              />
-              <Field
-                label="읽는법"
-                value={entry.reading}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'reading', v)}
-              />
-              <Field
-                label="뜻"
-                value={entry.meaning}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'meaning', v)}
-              />
-              <Field
-                label="예문"
-                value={entry.example}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'example', v)}
-              />
-              <Field
-                label="예문 읽는법"
-                value={entry.exampleReading}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'exampleReading', v)}
-              />
-              <Field
-                label="예문 뜻"
-                value={entry.exampleMeaning}
-                disabled={entry._saved}
-                onChange={(v) => updateEntry(idx, 'exampleMeaning', v)}
-              />
-            </div>
-          ))}
+            ) : (
+              <div
+                key={idx}
+                className={`preview-card ${entry._dupId ? 'is-dup' : ''} ${
+                  !entry._include ? 'is-excluded' : ''
+                } ${entry._error ? 'has-error' : ''}`}
+              >
+                <div className="preview-card-head">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={entry._include}
+                      onChange={() => toggleInclude(idx)}
+                    />
+                    {entry._dupId ? '기존 단어 업데이트' : '새 단어 추가'}
+                  </label>
+                </div>
+                {entry._error && <p className="entry-error">저장 실패: {entry._error}</p>}
+                <Field
+                  label="단어"
+                  value={entry.word}
+                  onChange={(v) => updateEntry(idx, 'word', v)}
+                />
+                <Field
+                  label="읽는법"
+                  value={entry.reading}
+                  onChange={(v) => updateEntry(idx, 'reading', v)}
+                />
+                <Field
+                  label="뜻"
+                  value={entry.meaning}
+                  onChange={(v) => updateEntry(idx, 'meaning', v)}
+                />
+                <Field
+                  label="예문"
+                  value={entry.example}
+                  onChange={(v) => updateEntry(idx, 'example', v)}
+                />
+                <Field
+                  label="예문 읽는법"
+                  value={entry.exampleReading}
+                  onChange={(v) => updateEntry(idx, 'exampleReading', v)}
+                />
+                <Field
+                  label="예문 뜻"
+                  value={entry.exampleMeaning}
+                  onChange={(v) => updateEntry(idx, 'exampleMeaning', v)}
+                />
+              </div>
+            )
+          )}
           <button
             className="primary"
             onClick={handleSaveAll}
