@@ -10,13 +10,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="日本語 단어장" />
     <title>日本語 단어장</title>
-    <!-- 일본어(가나/한자)가 예쁘게 보이도록 Noto Sans JP, 한글은 Noto Sans KR을 웹폰트로 불러온다 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- 일본어(가나/한자)·한글 웹폰트(Noto Sans JP / Noto Sans KR)는 Google Fonts CDN 대신
+         npm 패키지(@fontsource)로 번들에 직접 포함시킨다 (src/main.jsx 참고).
+         CDN 방식은 모바일에서 한자 구간별 파일이 일부만 로딩 실패하면 한 단어 안에서도
+         글자마다 다른 폰트가 섞여 보이는 문제가 있어 자체 호스팅으로 바꿨다. -->
   </head>
   <body>
     <div id="root"></div>
