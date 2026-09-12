@@ -3,8 +3,8 @@
 Notion에 정리해둔 일본어 단어를 붙여넣으면 Claude API가 읽는법·뜻·예문을 자동으로 채워서
 단어장으로 정리해주고, Anki 스타일 간격 반복(SRS)으로 복습할 수 있는 개인용 웹 앱입니다.
 
-- 프론트엔드: React + Vite
-- 데이터 저장: Firebase (Authentication + Firestore)
+- 프론트엔드: React + Vite (로그인 없이 혼자 쓰는 용도)
+- 데이터 저장: Firebase Firestore
 - 단어 자동 생성: Claude API (Vercel Serverless Function을 통해 서버에서만 호출)
 - 배포: GitHub + Vercel
 
@@ -13,15 +13,8 @@ Notion에 정리해둔 일본어 단어를 붙여넣으면 Claude API가 읽는�
 ## 1. Firebase 콘솔에서 해야 할 일
 
 이미 Firebase 프로젝트(`study-65680`)를 만들어 설정 값을 주셨고, 코드(`src/firebase.js`)에 반영해두었습니다.
-**Firebase 콘솔(console.firebase.google.com)에서 아래 2가지만 켜주시면 됩니다.**
+로그인 기능은 빼기로 해서, **Firestore Database만 만들면** 됩니다.
 
-### 1) Authentication 활성화
-1. 왼쪽 메뉴 **Authentication** → **시작하기(Get started)**
-2. 로그인 방법(Sign-in method) 탭에서 **이메일/비밀번호(Email/Password)** 를 사용 설정
-3. (선택) **Users** 탭에서 본인이 쓸 이메일/비밀번호로 직접 사용자를 하나 추가해도 되고,
-   앱 첫 화면에서 "계정 만들기"로 가입해도 됩니다.
-
-### 2) Firestore Database 만들기
 1. 왼쪽 메뉴 **Firestore Database** → **데이터베이스 만들기**
 2. 위치(리전)는 **asia-northeast3 (서울)** 추천
 3. 보안 규칙은 일단 "테스트 모드"로 시작해도 되지만, **아래 규칙으로 반드시 교체**하세요.
@@ -31,16 +24,22 @@ Notion에 정리해둔 일본어 단어를 붙여넣으면 Claude API가 읽는�
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    match /users/ckm-personal/{document=**} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
 ```
 
 콘솔의 **Firestore Database → 규칙(Rules)** 탭에 위 내용을 붙여넣고 **게시(Publish)** 하면 됩니다.
-이 규칙은 "로그인한 본인의 데이터만 본인이 읽고 쓸 수 있다"는 뜻이라, 다른 사람이 URL을 알아도
-본인 계정으로 로그인하지 않으면 데이터를 볼 수 없습니다.
+
+> ⚠️ **보안 참고**: 로그인이 없으므로 이 규칙은 `users/ckm-personal` 경로에 한해서는 URL만 알면 누구나
+> 읽고 쓸 수 있게 열려 있습니다(그 외 경로는 전부 차단). 개인 취미용 단어장이라 데이터 민감도는 낮지만,
+> 배포된 Vercel URL을 다른 사람과 공유하지 않는 것으로 충분히 안전합니다. 나중에 걱정되면 언제든
+> 간단한 로그인을 다시 붙일 수 있습니다.
 
 ---
 
@@ -66,8 +65,7 @@ service cloud.firestore {
 4. **배포 전에 반드시** Vercel 프로젝트의 **Settings → Environment Variables** 에서 아래 추가:
    - `ANTHROPIC_API_KEY` = 2단계에서 발급받은 키
    - (선택) `CLAUDE_MODEL` = 다른 모델을 쓰고 싶을 때만
-5. **Deploy** 클릭 → 완료 후 나오는 URL(`https://jp-vocab-app-xxxx.vercel.app`)로 접속
-6. 접속 후 "계정 만들기"로 본인 이메일/비밀번호 가입 → 바로 사용 시작
+5. **Deploy** 클릭 → 완료 후 나오는 URL(`https://jp-vocab-app-xxxx.vercel.app`)로 접속하면 로그인 없이 바로 사용 가능
 
 이후 코드를 수정하고 싶으면 GitHub 저장소 파일을 웹에서 수정(또는 다시 업로드)하면
 Vercel이 자동으로 재배포합니다.
@@ -106,7 +104,6 @@ npm run dev
 
 ## 6. 참고 문서 (출처)
 
-- Firebase Authentication: https://firebase.google.com/docs/auth
 - Firebase Firestore 보안 규칙: https://firebase.google.com/docs/firestore/security/get-started
 - Anthropic Messages API: https://docs.claude.com/en/api/messages
 - Vercel Serverless Functions: https://vercel.com/docs/functions
