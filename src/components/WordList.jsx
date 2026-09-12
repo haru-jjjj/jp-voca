@@ -49,6 +49,11 @@ export default function WordList({ uid, words }) {
               <div>
                 <span className="word-main">{w.word}</span>
                 <span className="word-reading">（{w.reading}）</span>
+                {w.uncertain && (
+                  <span className="uncertain-badge" title={w.note || '확신이 낮은 항목이에요'}>
+                    ⚠️ 확인 필요
+                  </span>
+                )}
               </div>
               <div className="word-actions">
                 <button
@@ -76,6 +81,7 @@ export default function WordList({ uid, words }) {
               </div>
             </div>
             <p className="word-meaning">{w.meaning}</p>
+            {w.uncertain && w.note && <p className="uncertain-note">⚠️ {w.note}</p>}
             {w.example && (
               <div className="word-example">
                 <div className="example-jp">

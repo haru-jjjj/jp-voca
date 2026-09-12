@@ -73,7 +73,17 @@ export function AiFixPanel({ uid, word, onClose, onSaved }) {
     setSaving(true)
     setError('')
     try {
-      const { word: w, reading, meaning, example, exampleReading, exampleMeaning, tags } = proposal
+      const {
+        word: w,
+        reading,
+        meaning,
+        example,
+        exampleReading,
+        exampleMeaning,
+        tags,
+        uncertain,
+        note,
+      } = proposal
       await updateWord(uid, word.id, {
         word: w ?? word.word,
         reading: reading ?? word.reading,
@@ -82,6 +92,8 @@ export function AiFixPanel({ uid, word, onClose, onSaved }) {
         exampleReading: exampleReading ?? word.exampleReading,
         exampleMeaning: exampleMeaning ?? word.exampleMeaning,
         tags: Array.isArray(tags) ? tags : word.tags || [],
+        uncertain: !!uncertain,
+        note: note || '',
       })
       onSaved?.()
     } catch (err) {
@@ -117,6 +129,11 @@ export function AiFixPanel({ uid, word, onClose, onSaved }) {
 
       {proposal && (
         <div className="ai-fix-proposal">
+          {proposal.uncertain && (
+            <p className="uncertain-note">
+              ⚠️ AI도 확신이 서지 않는 부분이 있어요: {proposal.note || '문맥에 따라 다를 수 있어요.'}
+            </p>
+          )}
           {changedFields.length === 0 ? (
             <p className="hint">메모를 반영해도 달라지는 내용이 없어요.</p>
           ) : (

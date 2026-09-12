@@ -426,7 +426,9 @@ export default function AddWords({ uid, existingWords }) {
       <div className="memo-head">
         <div>
           <h2>단어 메모장</h2>
-          <p className="hint">자동 저장 · 새로 추가한 줄만 분석해요</p>
+          <p className="hint">
+            자동 저장 · 새로 추가한 줄만 분석해요 · 읽는법/상황을 같이 적어두면 더 정확해져요
+          </p>
         </div>
         <span className="save-indicator">
           {saveState === 'saving' && '저장 중...'}
@@ -438,7 +440,12 @@ export default function AddWords({ uid, existingWords }) {
         className="memo-textarea"
         value={rawText}
         onChange={(e) => setRawText(e.target.value)}
-        placeholder="예) 食べる&#10;또는 Notion에서 복사한 여러 줄의 텍스트를 계속 이어서 적어두세요."
+        placeholder={
+          '예) 食べる\n' +
+          '諦める（あきらめる）- 드라마에서 들음\n' +
+          '또는 Notion에서 복사한 여러 줄의 텍스트를 계속 이어서 적어두세요.\n' +
+          '읽는법이나 들은 상황을 같이 적어두면 AI가 더 정확하게 채워줘요.'
+        }
         spellCheck={false}
       />
 
@@ -502,7 +509,11 @@ export default function AddWords({ uid, existingWords }) {
                     />
                     {entry._dupId ? '기존 단어 업데이트' : '새 단어 추가'}
                   </label>
+                  {entry.uncertain && <span className="uncertain-badge">⚠️ 확인 필요</span>}
                 </div>
+                {entry.uncertain && entry.note && (
+                  <p className="uncertain-note">⚠️ {entry.note}</p>
+                )}
                 {entry._error && <p className="entry-error">저장 실패: {entry._error}</p>}
                 <Field
                   label="단어"

@@ -5,7 +5,8 @@
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001'
 
-export const config = { maxDuration: 30 }
+// 웹 검색(서버사이드 도구)이 추가돼 검색이 필요한 경우 시간이 더 걸릴 수 있어 넉넉히 잡는다.
+export const config = { maxDuration: 45 }
 
 const SYSTEM_PROMPT = `너는 일본어 단어장에 이미 저장된 항목 하나를 수정하는 도우미다.
 사용자가 기존 항목(JSON)과, 그 항목에서 잘못됐다고 생각하는 점이나 추가로 알려주는 정보(메모)를 함께 준다.
@@ -20,15 +21,23 @@ const SYSTEM_PROMPT = `너는 일본어 단어장에 이미 저장된 항목 하
   "example": "그 단어를 사용한 일본어 예문 (너무 길지 않게, 한 문장)",
   "exampleReading": "예문 전체의 히라가나 읽는 법",
   "exampleMeaning": "예문의 한국어 뜻",
-  "tags": ["품사 등 짧은 태그, 예: 동사, N3"]
+  "tags": ["품사 등 짧은 태그, 예: 동사, N3"],
+  "uncertain": false,
+  "note": ""
 }
 
 규칙:
-- 사용자 메모에서 명시적으로 지적하거나 요청한 부분은 정확하게 반영한다.
+- 사용자 메모에서 명시적으로 지적하거나 요청한 부분은 정확하게 반영한다. 사용자가 직접 알려준 읽는법/뜻/맥락은
+  명백히 틀리지 않은 한 그대로 신뢰해서 사용한다.
 - 메모와 관련 없는 필드는 원래 값이 맞다면 그대로 유지한다. 다만 원래 값 자체가 메모 내용과 모순되거나 명백히 잘못됐다면 함께 바로잡는다.
 - 단어 표기(word) 자체는 사용자가 명시적으로 바꿔달라고 하지 않는 한 그대로 유지한다.
 - 단어나 뜻이 바뀌어서 기존 예문이 더 이상 맞지 않게 되면, 예문/예문 읽는법/예문 뜻도 자연스럽게 새로 만든다.
-- 응답은 반드시 유효한 JSON 객체 하나여야 한다. 객체 바깥에 아무 텍스트도 붙이지 않는다.`
+- **읽는법을 고치거나 다시 채울 때는 사전에 가장 널리 등재된, 가장 흔히 쓰이는 읽는법을 우선한다.**
+  사용자 메모에 읽는법이 명시돼 있지 않고, 한자에 읽는법이 여러 개 있어 헷갈리거나 확신이 서지 않으면
+  web_search 도구로 믿을 만한 사전을 검색해 확인한 뒤 답한다.
+- 검색해봐도(또는 검색이 필요 없어도) 여전히 확신이 서지 않는 부분이 있으면 "uncertain": true 로 표시하고,
+  "note"에 무엇이 불확실한지 한 문장으로 짧게 적는다. 확신 있는 항목/사용자가 직접 확인해준 항목은 "uncertain": false, "note": "" 로 둔다.
+- 검색 과정("~을 검색해보겠습니다" 등)을 최종 응답 텍스트에 남기지 않는다. 응답은 반드시 유효한 JSON 객체 하나여야 하며, 객체 바깥에 아무 텍스트도 붙이지 않는다.`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -59,6 +68,8 @@ export default async function handler(req, res) {
     exampleReading: word.exampleReading || '',
     exampleMeaning: word.exampleMeaning || '',
     tags: Array.isArray(word.tags) ? word.tags : [],
+    uncertain: !!word.uncertain,
+    note: word.note || '',
   }
 
   const userMessage = `기존 항목:\n${JSON.stringify(existing, null, 2)}\n\n사용자 메모(수정 요청/추가 정보):\n${note
@@ -77,6 +88,8 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 2048,
         system: SYSTEM_PROMPT,
+        // 읽는법이 불확실할 때 사전을 검색해 확인할 수 있도록 서버사이드 웹 검색 도구를 켜둔다.
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
         messages: [{ role: 'user', content: userMessage }],
       }),
     })
@@ -87,8 +100,7 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json()
-    const textBlock = data?.content?.find((c) => c.type === 'text')
-    const raw = textBlock?.text || ''
+    const raw = extractFinalText(data?.content)
 
     const entry = parseEntry(raw)
     if (entry === null) {
@@ -102,6 +114,22 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: `서버 오류: ${err.message}` })
   }
+}
+
+// 웹 검색 도구를 쓰면 응답 content 배열에 text 블록 사이사이 검색 관련 블록이 끼어들 수 있다.
+// 배열 맨 끝에서부터 연속된 text 블록들(=검색이 다 끝난 뒤의 최종 답변)만 모아서 쓴다.
+function extractFinalText(contentArr) {
+  if (!Array.isArray(contentArr)) return ''
+  const finalTexts = []
+  for (let i = contentArr.length - 1; i >= 0; i--) {
+    const block = contentArr[i]
+    if (block.type === 'text') {
+      finalTexts.unshift(block.text)
+    } else {
+      break
+    }
+  }
+  return finalTexts.join('\n')
 }
 
 function parseEntry(raw) {

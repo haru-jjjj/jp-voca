@@ -96,6 +96,7 @@ export default function Review({ uid, words, stats }) {
           >
             <div className="flashcard-front">
               <span className="flash-word">{current.word}</span>
+              {current.uncertain && <span className="uncertain-badge">⚠️ 확인 필요</span>}
               <button
                 className="icon-btn"
                 onClick={(e) => {
@@ -124,6 +125,9 @@ export default function Review({ uid, words, stats }) {
             <div className="flashcard-back">
               <p className="flash-reading">{current.reading}</p>
               <p className="flash-meaning">{current.meaning}</p>
+              {current.uncertain && current.note && (
+                <p className="uncertain-note">⚠️ {current.note}</p>
+              )}
               {current.example && (
                 <div className="flash-example">
                   <p>{current.example}</p>

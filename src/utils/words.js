@@ -36,6 +36,10 @@ export async function addWord(uid, entry) {
     exampleReading: entry.exampleReading || '',
     exampleMeaning: entry.exampleMeaning || '',
     tags: entry.tags || [],
+    // Claude가 읽는법 등에 확신이 없을 때 표시해두는 플래그. 단어장/복습 화면에서
+    // "확인 필요" 배지로 보여줘서, 사용자가 직접 찾아봐야 할 항목을 눈에 띄게 한다.
+    uncertain: !!entry.uncertain,
+    note: entry.note || '',
     srs: initialSrs(),
     wrongStreak: 0,
     createdAt: serverTimestamp(),

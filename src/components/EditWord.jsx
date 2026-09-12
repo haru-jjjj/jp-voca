@@ -39,7 +39,8 @@ export function EditPanel({ uid, word, onClose, onSaved }) {
     setSaving(true)
     setError('')
     try {
-      await updateWord(uid, word.id, form)
+      // 사용자가 직접 확인해서 고친 것이므로, "확인 필요" 표시가 남아있었다면 함께 지운다.
+      await updateWord(uid, word.id, { ...form, uncertain: false, note: '' })
       onSaved?.()
     } catch (err) {
       setError(err.message)
