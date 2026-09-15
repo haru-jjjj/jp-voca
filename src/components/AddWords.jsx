@@ -452,7 +452,14 @@ export default function AddWords({ uid, existingWords }) {
   }
 
   function handleClearMemo() {
-    if (!confirm('메모 내용을 전부 지울까요? (이미 저장된 단어장에는 영향 없음)')) return
+    const lineCount = getLines(rawText).length
+    if (
+      !confirm(
+        `정말로 메모 내용을 전부 지울까요? 되돌릴 수 없습니다.\n` +
+          `지금 메모에 적힌 ${lineCount}줄이 전부 사라집니다. (이미 저장된 단어장 자체에는 영향 없음)`
+      )
+    )
+      return
     setRawText('')
     setProcessedLines([])
     setPreview(null)
@@ -495,15 +502,27 @@ export default function AddWords({ uid, existingWords }) {
         <button onClick={handleGenerate} disabled={loading || saving || !rawText.trim()}>
           {loading ? genProgress || '생성 중...' : '단어장 업데이트'}
         </button>
-        <button className="ghost-btn" onClick={handleClearMemo} disabled={!rawText || saving}>
-          메모 전체 지우기
-        </button>
+      </div>
+
+      {/* 자주 누르지 않는(게다가 하나는 데이터를 실제로 지우는) 동작들은 실수로 손이 닿지
+          않도록 위 주요 버튼과 눈에 띄게 떨어뜨리고, 작고 수수한 텍스트 링크 형태로 둔다.
+          "메모 전체 지우기"는 실제로 데이터가 사라지는 동작이라 별도로 danger 스타일을 준다. */}
+      <div className="memo-actions-minor">
         <button
-          className="ghost-btn"
+          type="button"
+          className="minor-link-btn"
           onClick={handleReanalyzeAll}
           disabled={loading || saving || processedLines.length === 0}
         >
           전체 다시 분석
+        </button>
+        <button
+          type="button"
+          className="minor-link-btn danger"
+          onClick={handleClearMemo}
+          disabled={!rawText || saving}
+        >
+          메모 전체 지우기
         </button>
       </div>
       {error && <p className="error">{error}</p>}

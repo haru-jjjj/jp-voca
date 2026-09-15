@@ -260,6 +260,32 @@ textarea:focus,
   color: var(--text-soft);
   border: 1px solid var(--border);
 }
+/* 자주 쓰지 않는(하나는 실제로 데이터를 지우는) 보조 동작들.
+   주 버튼("단어장 업데이트")과 눈에 띄게 떨어뜨리고, 작은 텍스트 링크로 눌러서
+   실수로 큰 버튼처럼 잘못 탭하는 일이 없도록 한다. */
+.memo-actions-minor {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 14px;
+}
+.minor-link-btn {
+  background: none;
+  border: none;
+  padding: 6px 2px;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.minor-link-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.minor-link-btn.danger {
+  color: var(--danger);
+}
 .panel > button:disabled,
 button:disabled {
   opacity: 0.5;
