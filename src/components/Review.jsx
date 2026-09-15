@@ -55,10 +55,16 @@ export default function Review({ uid, words, stats }) {
     setQueue((prev) => {
       const rest = prev.slice(1)
       if (quality === 'again') {
-        // 같은 세션 안에서 다시 등장하도록 뒤쪽에 재배치
+        // 같은 세션 안에서 다시 등장하도록 뒤쪽에 재배치.
+        // 이때 반드시 "방금 갱신된" srs/wrongStreak을 반영한 새 객체를 넣어야 한다.
+        // 원래의 current(큐에 있던 오래된 객체)를 그대로 다시 넣으면, 같은 단어를
+        // 이 세션 안에서 또 "다시"를 눌러도 wrongStreak이 매번 옛날 값 기준으로
+        // 1로만 계산돼서(예: 0→1, 0→1, ...) 2 이상으로 절대 누적되지 않고,
+        // 그 결과 "다시"를 여러 번 눌러도 헷갈리는 단어에 안 잡히는 버그가 있었다.
+        const updatedCurrent = { ...current, srs: newSrs, wrongStreak }
         const pos = Math.min(rest.length, 2 + Math.floor(Math.random() * 3))
         const copy = [...rest]
-        copy.splice(pos, 0, current)
+        copy.splice(pos, 0, updatedCurrent)
         return copy
       }
       return rest
