@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { addWord, findDuplicate, updateWord } from '../utils/words'
 import {
   subscribeMemo,
@@ -18,6 +18,20 @@ const MAX_NEW_LINES_PER_RUN = 30
 
 function getLines(text) {
   return text.split('\n').filter((l) => l.trim() !== '')
+}
+
+// 메모 안에서 특정 줄을 검색/삭제/수정할 때, 빈 줄까지 포함한 원본 줄 배열과
+// 각 줄이 rawText 안에서 시작/끝나는 문자 위치(offset)를 같이 계산해둔다.
+// (검색 결과에서 "이동"을 누르면 이 offset으로 textarea 커서를 옮긴다.)
+function getLineSpans(text) {
+  const lines = text.split('\n')
+  let offset = 0
+  return lines.map((line) => {
+    const start = offset
+    const end = offset + line.length
+    offset = end + 1 // '\n' 만큼
+    return { line, start, end }
+  })
 }
 
 // 배치가 너무 길면 한 번에 다 보내지 않고 줄 단위로 나눠서 여러 번 호출한다.
@@ -82,6 +96,15 @@ export default function AddWords({ uid, existingWords }) {
   const [saveDone, setSaveDone] = useState(0)
   const [restoredNotice, setRestoredNotice] = useState(false)
   const [infoMsg, setInfoMsg] = useState('')
+
+  // 메모 안에서 오류가 있는 단어(표준이 아니거나 뜻을 못 찾는 것 등)를 찾아가서
+  // 바로 지우거나 고칠 수 있게 하는 검색 기능. 한 번 스크롤해서 벗어나면 다시
+  // 찾기 힘들다는 문제를 해결하기 위함 — textarea 전체를 스크롤하는 대신
+  // 검색어로 걸러진 줄 목록에서 바로 이동/수정/삭제할 수 있게 한다.
+  const [memoSearch, setMemoSearch] = useState('')
+  const [editingLineIdx, setEditingLineIdx] = useState(null)
+  const [editingValue, setEditingValue] = useState('')
+  const textareaRef = useRef(null)
 
   const saveTimer = useRef(null)
   const skipNextSave = useRef(false) // 서버에서 내려온 값으로 세팅할 때는 다시 저장하지 않기 위함
@@ -467,6 +490,53 @@ export default function AddWords({ uid, existingWords }) {
     clearMemo(uid).catch(() => {})
   }
 
+  // 검색어와 일치하는 줄들(빈 줄 제외)만, 원래 줄 번호(idx)와 문자 위치(start/end)를 유지한 채로 뽑아낸다.
+  const memoMatches = useMemo(() => {
+    const q = memoSearch.trim().toLowerCase()
+    if (!q) return []
+    return getLineSpans(rawText)
+      .map((span, idx) => ({ ...span, idx }))
+      .filter(({ line }) => line.trim() !== '' && line.toLowerCase().includes(q))
+  }, [rawText, memoSearch])
+
+  // 검색 결과의 "이동": 해당 줄로 스크롤하고 커서로 선택해서 바로 눈에 띄게 한다.
+  function jumpToLine({ start, end }) {
+    setEditingLineIdx(null)
+    const el = textareaRef.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(start, end)
+  }
+
+  // 검색 결과에서 바로 그 줄 하나만 삭제한다 (메모의 나머지 내용은 그대로 유지).
+  function deleteLineAt(idx, lineText) {
+    if (!confirm(`이 줄을 메모에서 삭제할까요?\n"${lineText}"`)) return
+    const lines = rawText.split('\n')
+    lines.splice(idx, 1)
+    userEditedRef.current = true
+    setRawText(lines.join('\n'))
+    if (editingLineIdx === idx) {
+      setEditingLineIdx(null)
+    }
+  }
+
+  function startEditLine(idx, lineText) {
+    setEditingLineIdx(idx)
+    setEditingValue(lineText)
+  }
+
+  function saveEditLine(idx) {
+    const lines = rawText.split('\n')
+    lines[idx] = editingValue
+    userEditedRef.current = true
+    setRawText(lines.join('\n'))
+    setEditingLineIdx(null)
+  }
+
+  function cancelEditLine() {
+    setEditingLineIdx(null)
+  }
+
   return (
     <div className="panel">
       <div className="memo-head">
@@ -482,7 +552,85 @@ export default function AddWords({ uid, existingWords }) {
         </span>
       </div>
 
+      <div className="memo-search-row">
+        <input
+          type="text"
+          className="search-input memo-search-input"
+          placeholder="🔍 오류난 단어 찾기 (메모 안에서 검색해서 바로 이동/수정/삭제)"
+          value={memoSearch}
+          onChange={(e) => setMemoSearch(e.target.value)}
+        />
+        {memoSearch.trim() && (
+          <button
+            type="button"
+            className="minor-link-btn"
+            onClick={() => setMemoSearch('')}
+          >
+            검색 지우기
+          </button>
+        )}
+      </div>
+
+      {memoSearch.trim() && (
+        <div className="memo-match-list">
+          {memoMatches.length === 0 && (
+            <p className="hint">일치하는 줄이 없습니다.</p>
+          )}
+          {memoMatches.map(({ idx, line, start, end }) => (
+            <div className="memo-match-row" key={idx}>
+              {editingLineIdx === idx ? (
+                <>
+                  <input
+                    type="text"
+                    className="memo-match-edit-input"
+                    value={editingValue}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="memo-match-actions">
+                    <button type="button" className="link-btn" onClick={() => saveEditLine(idx)}>
+                      저장
+                    </button>
+                    <button type="button" className="link-btn" onClick={cancelEditLine}>
+                      취소
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="memo-match-text">{line}</span>
+                  <div className="memo-match-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => jumpToLine({ start, end })}
+                    >
+                      이동
+                    </button>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => startEditLine(idx, line)}
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      className="link-btn danger"
+                      onClick={() => deleteLineAt(idx, line)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <textarea
+        ref={textareaRef}
         className="memo-textarea"
         value={rawText}
         onChange={(e) => {
